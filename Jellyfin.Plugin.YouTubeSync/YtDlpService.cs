@@ -14,7 +14,9 @@ namespace Jellyfin.Plugin.YouTubeSync;
 /// </summary>
 public class YtDlpService
 {
-    private const string PlaybackFormatSelector = "b[ext=mp4][height<=1080]/b[ext=mp4][height<=720]/b";
+    private const string BroadCompatibility720pSelector = "b[protocol!*=m3u8][ext=mp4][height<=720]/b[ext=mp4][height<=720]/b[height<=720]";
+    private const string Balanced1080pSelector = "b[ext=mp4][height<=1080]/b[ext=mp4][height<=720]/b";
+    private const string MaximumQualitySelector = "b";
 
     private readonly ILogger<YtDlpService> _logger;
 
@@ -33,8 +35,10 @@ public class YtDlpService
     public async Task<string?> GetPlaybackUrlAsync(string videoId, CancellationToken cancellationToken)
     {
         var url = $"https://www.youtube.com/watch?v={videoId}";
+        var playbackTarget = GetPlaybackTarget();
+        var playbackSelector = GetPlaybackFormatSelector(playbackTarget);
         var result = await RunYtDlpTextAsync(
-            new[] { "-f", PlaybackFormatSelector, "--get-url", "--no-playlist", url },
+            new[] { "-f", playbackSelector, "--get-url", "--no-playlist", url },
             cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(result))
@@ -53,7 +57,10 @@ public class YtDlpService
         var manifestUrl = lines.FirstOrDefault(IsManifestUrl);
         if (!string.IsNullOrWhiteSpace(manifestUrl))
         {
-            _logger.LogInformation("Resolved playback URL for {VideoId}: manifest", videoId);
+            _logger.LogInformation(
+                "Resolved playback URL for {VideoId}: manifest ({PlaybackTarget})",
+                videoId,
+                playbackTarget);
             return manifestUrl;
         }
 
@@ -66,8 +73,35 @@ public class YtDlpService
         }
 
         var playbackUrl = lines[0];
-        _logger.LogInformation("Resolved playback URL for {VideoId}: {PlaybackKind}", videoId, DescribePlaybackUrl(playbackUrl));
+        _logger.LogInformation(
+            "Resolved playback URL for {VideoId}: {PlaybackKind} ({PlaybackTarget})",
+            videoId,
+            DescribePlaybackUrl(playbackUrl),
+            playbackTarget);
         return playbackUrl;
+    }
+
+    /// <summary>Gets the currently configured playback target.</summary>
+    public string GetPlaybackTarget()
+    {
+        var configured = Plugin.Instance?.Configuration.PlaybackTarget;
+        return configured switch
+        {
+            PlaybackTargets.BroadCompatibility720p => PlaybackTargets.BroadCompatibility720p,
+            PlaybackTargets.Balanced1080p => PlaybackTargets.Balanced1080p,
+            PlaybackTargets.MaximumQuality => PlaybackTargets.MaximumQuality,
+            _ => PlaybackTargets.BroadCompatibility720p
+        };
+    }
+
+    private static string GetPlaybackFormatSelector(string playbackTarget)
+    {
+        return playbackTarget switch
+        {
+            PlaybackTargets.Balanced1080p => Balanced1080pSelector,
+            PlaybackTargets.MaximumQuality => MaximumQualitySelector,
+            _ => BroadCompatibility720pSelector
+        };
     }
 
     /// <summary>

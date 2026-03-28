@@ -33,6 +33,15 @@
                 </div>
 
                 <div class="inputContainer">
+                    <select is="emby-select" id="PlaybackTarget" label="Playback target">
+                        <option value="BroadCompatibility720p">Broad compatibility (prefer 720p MP4)</option>
+                        <option value="Balanced1080p">Balanced (allow up to 1080p)</option>
+                        <option value="MaximumQuality">Maximum quality</option>
+                    </select>
+                    <div class="fieldDescription">Choose the playback target yt-dlp should prefer. Broad compatibility tries to avoid HLS-only streams when a 720p MP4 exists.</div>
+                </div>
+
+                <div class="inputContainer">
                     <input is="emby-input" type="number" id="MaxVideosPerSource" label="Max videos per source" min="0" />
                     <div class="fieldDescription">Maximum number of videos to sync per channel or playlist. Set to <code>0</code> for no limit (not recommended for large channels).</div>
                 </div>

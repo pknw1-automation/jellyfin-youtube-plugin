@@ -31,13 +31,16 @@ public class ResolveService
     /// </summary>
     public async Task<string?> ResolveAsync(string videoId, CancellationToken cancellationToken)
     {
-        if (_cache.TryGet(videoId, out var cached))
+        var playbackTarget = _ytDlpService.GetPlaybackTarget();
+        var cacheKey = BuildCacheKey(videoId, playbackTarget);
+
+        if (_cache.TryGet(cacheKey, out var cached))
         {
-            _logger.LogDebug("Cache hit for video {VideoId}", videoId);
+            _logger.LogDebug("Cache hit for video {VideoId} using target {PlaybackTarget}", videoId, playbackTarget);
             return cached;
         }
 
-        _logger.LogInformation("Resolving video {VideoId} via yt-dlp", videoId);
+        _logger.LogInformation("Resolving video {VideoId} via yt-dlp with target {PlaybackTarget}", videoId, playbackTarget);
 
         var playbackUrl = await _ytDlpService.GetPlaybackUrlAsync(videoId, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(playbackUrl))
@@ -47,14 +50,20 @@ public class ResolveService
         }
 
         var cacheMinutes = Plugin.Instance?.Configuration.CacheMinutes ?? 5;
-        _cache.Set(videoId, playbackUrl, cacheMinutes);
+        _cache.Set(cacheKey, playbackUrl, cacheMinutes);
 
         _logger.LogInformation(
-            "Resolved {VideoId} via direct playback URL – cached for {Minutes} min",
+            "Resolved {VideoId} via direct playback URL using target {PlaybackTarget} - cached for {Minutes} min",
             videoId,
+            playbackTarget,
             cacheMinutes);
 
         return playbackUrl;
+    }
+
+    private static string BuildCacheKey(string videoId, string playbackTarget)
+    {
+        return string.Concat(videoId, "|", playbackTarget);
     }
 }
 

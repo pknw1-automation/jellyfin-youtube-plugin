@@ -95,6 +95,7 @@ export default function (view) {
             view.querySelector('#LibraryBasePath').value = config.LibraryBasePath || '/media/youtube';
             view.querySelector('#JellyfinBaseUrl').value = config.JellyfinBaseUrl || 'http://localhost:8096';
             view.querySelector('#CacheMinutes').value = config.CacheMinutes != null ? config.CacheMinutes : 5;
+            view.querySelector('#PlaybackTarget').value = config.PlaybackTarget || 'BroadCompatibility720p';
             view.querySelector('#MaxVideosPerSource').value = config.MaxVideosPerSource != null ? config.MaxVideosPerSource : 200;
             sources = config.Sources || [];
             renderSources();
@@ -111,6 +112,7 @@ export default function (view) {
             LibraryBasePath: view.querySelector('#LibraryBasePath').value.trim(),
             JellyfinBaseUrl: view.querySelector('#JellyfinBaseUrl').value.trim(),
             CacheMinutes: parseInt(view.querySelector('#CacheMinutes').value, 10) || 5,
+            PlaybackTarget: view.querySelector('#PlaybackTarget').value,
             MaxVideosPerSource: parseInt(view.querySelector('#MaxVideosPerSource').value, 10) || 0,
             Sources: sources
         };

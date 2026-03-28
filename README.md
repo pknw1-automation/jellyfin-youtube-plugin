@@ -12,7 +12,7 @@ via **yt-dlp**, without pre-downloading any content.
    - `<VideoTitle>.nfo` – episode metadata from yt-dlp's flat-playlist output
 
 2. **Resolver endpoint** – `GET /YouTubeSync/resolve/{videoId}`  
-   Calls `yt-dlp --get-url` with the configured format selector, caches the returned playback
+   Calls `yt-dlp --get-url` with the configured playback target, caches the returned playback
    URL for a configurable number of minutes, and returns an **HTTP 302** redirect. The resolved
    URL may be a direct media URL or a manifest URL that Jellyfin can open itself.
 
@@ -88,7 +88,16 @@ managed through the UI — no manual file editing is required.
 | Library base path | `/media/youtube` | Root folder inside a Jellyfin library where .strm/.nfo files are written |
 | Jellyfin base URL | `http://localhost:8096` | Externally accessible Jellyfin URL written into `.strm` resolver links — **set this to your public URL** when clients access Jellyfin remotely |
 | CDN URL cache duration | `5` min | How long a resolved CDN URL is cached in memory before being re-fetched |
+| Playback target | `Broad compatibility` | Chooses whether yt-dlp should prefer a safer 720p MP4, a balanced 1080p target, or maximum available quality |
 | Max videos per source | `200` | Maximum number of videos to sync per channel or playlist (0 = unlimited) |
+
+### Playback target guidance
+
+| Target | Behavior |
+|---|---|
+| Broad compatibility (prefer 720p MP4) | Best default for mixed clients. Prefers a plain 720p MP4 stream when available, which avoids fragile HLS remux paths on some Jellyfin clients. |
+| Balanced (allow up to 1080p) | Good fit when desktop and native clients matter more than edge-case compatibility. May resolve manifest-based playback URLs. |
+| Maximum quality | Lets yt-dlp choose the best combined stream it can expose. Highest quality, lowest predictability across clients. |
 
 ### Adding a source (channel or playlist)
 
@@ -115,8 +124,8 @@ The plugin targets **`targetAbi: 10.11.6.0`**.  To run on a different version:
 
 ## Known limitations (v1)
 
+- Broad compatibility mode is intentionally conservative and may cap many videos at 720p to keep playback stable across more Jellyfin clients.
 - Progressive H.264/AAC streams are typically available only up to 720 p on YouTube; 1080p
-   progressive is rare, so high-quality playback depends on whatever playback URL `yt-dlp`
-   resolves for the chosen selector.
+   progressive is rare, so 1080p and higher targets often resolve to manifest-based playback URLs instead.
 - No cookie support – age-restricted or member-only videos will not resolve.
 

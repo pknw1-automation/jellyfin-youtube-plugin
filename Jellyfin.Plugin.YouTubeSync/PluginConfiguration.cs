@@ -3,6 +3,19 @@ using MediaBrowser.Model.Plugins;
 
 namespace Jellyfin.Plugin.YouTubeSync;
 
+/// <summary>Named playback targets exposed in the plugin configuration UI.</summary>
+public static class PlaybackTargets
+{
+    /// <summary>Prefer broadly compatible 720p progressive MP4 when available.</summary>
+    public const string BroadCompatibility720p = "BroadCompatibility720p";
+
+    /// <summary>Prefer up to 1080p MP4 and allow manifest playback when needed.</summary>
+    public const string Balanced1080p = "Balanced1080p";
+
+    /// <summary>Let yt-dlp choose the highest-quality combined stream it can expose.</summary>
+    public const string MaximumQuality = "MaximumQuality";
+}
+
 /// <summary>Holds all user-configurable settings for the YouTubeSync plugin.</summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
@@ -32,6 +45,11 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Gets or sets how many minutes a resolved CDN URL stays in the in-memory cache.
     /// </summary>
     public int CacheMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the playback target used when asking yt-dlp for a playback URL.
+    /// </summary>
+    public string PlaybackTarget { get; set; } = PlaybackTargets.BroadCompatibility720p;
 
     /// <summary>
     /// Gets or sets the maximum number of videos to sync per source.
