@@ -6,6 +6,15 @@
     "description": "Syncs YouTube channels and playlists into Jellyfin via yt-dlp. Generates .strm and .nfo files and resolves direct-play progressive MP4/H.264/AAC streams on demand.",
     "overview": "YouTube channel and playlist sync for Jellyfin via yt-dlp",
     "owner": "kingschnulli",
-    "versions": []
+    "versions": [
+      {
+        "version": "0.0.2.0",
+        "changelog": "Release 0.0.2.0",
+        "targetAbi": "10.11.6.0",
+        "sourceUrl": "https://github.com/kingschnulli/jellyfin-youtube-plugin/releases/download/v0.0.2/jellyfin-youtubesync_0.0.2.zip",
+        "checksum": "6720f033586ca75359f7b6b703bfc744",
+        "timestamp": "2026-03-28T08:52:54Z"
+      }
+    ]
   }
 ]
