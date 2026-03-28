@@ -12,12 +12,9 @@ via **yt-dlp**, without pre-downloading any content.
    - `<VideoTitle>.nfo` – episode metadata from yt-dlp's flat-playlist output
 
 2. **Resolver endpoint** – `GET /YouTubeSync/resolve/{videoId}`  
-   Calls `yt-dlp -J`, selects the best **progressive ≤1080p** stream, caches the playback
-   result for a configurable number of minutes, and returns an **HTTP 302** redirect when a
-   direct combined stream exists. If no progressive stream at or below 1080p exists, it picks
-   a **DASH video + audio** pair, starts an **ffmpeg** merge into a growing temporary MP4 file,
-   begins serving playback once the file has enough initial data, and keeps the partially merged
-   file only while it is actively needed or briefly cached for reuse.
+   Calls `yt-dlp --get-url` with the configured format selector, caches the returned playback
+   URL for a configurable number of minutes, and returns an **HTTP 302** redirect. The resolved
+   URL may be a direct media URL or a manifest URL that Jellyfin can open itself.
 
 ## Requirements
 
@@ -25,7 +22,6 @@ via **yt-dlp**, without pre-downloading any content.
 |---|---|
 | Jellyfin | 10.11.6 |
 | yt-dlp | must be on PATH inside the container (or configure full path in plugin settings) |
-| ffmpeg | must be on PATH inside the container or configured explicitly in plugin settings |
 | .NET SDK | 9.0 (build only) |
 
 ## Building
@@ -89,7 +85,6 @@ managed through the UI — no manual file editing is required.
 | Setting | Default | Description |
 |---|---|---|
 | yt-dlp executable path | `yt-dlp` | Path to the yt-dlp binary (must be on PATH or provide the full path) |
-| ffmpeg executable path | empty | Optional full path to the ffmpeg binary. Leave empty to use `ffmpeg` from PATH |
 | Library base path | `/media/youtube` | Root folder inside a Jellyfin library where .strm/.nfo files are written |
 | Jellyfin base URL | `http://localhost:8096` | Externally accessible Jellyfin URL written into `.strm` resolver links — **set this to your public URL** when clients access Jellyfin remotely |
 | CDN URL cache duration | `5` min | How long a resolved CDN URL is cached in memory before being re-fetched |
@@ -120,11 +115,8 @@ The plugin targets **`targetAbi: 10.11.6.0`**.  To run on a different version:
 
 ## Known limitations (v1)
 
-- DASH fallback writes to a growing temporary MP4 file so playback can start before the full
-   download completes, but this is still less file-like than a fully premerged asset.
 - Progressive H.264/AAC streams are typically available only up to 720 p on YouTube; 1080p
-   progressive is rare, so the DASH merge path will often be used for 1080p playback.
+   progressive is rare, so high-quality playback depends on whatever playback URL `yt-dlp`
+   resolves for the chosen selector.
 - No cookie support – age-restricted or member-only videos will not resolve.
-- DASH merging depends on ffmpeg being installed and reachable either through the configured
-   binary path or PATH.
 

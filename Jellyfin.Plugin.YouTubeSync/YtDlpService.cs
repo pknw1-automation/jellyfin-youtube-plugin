@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.IO;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,18 +25,6 @@ public class YtDlpService
     }
 
     private string YtDlpPath => Plugin.Instance?.Configuration.YtDlpPath ?? "yt-dlp";
-    private string FfmpegPath => string.IsNullOrWhiteSpace(Plugin.Instance?.Configuration.FfmpegPath)
-        ? "ffmpeg"
-        : Plugin.Instance!.Configuration.FfmpegPath;
-
-    /// <summary>
-    /// Returns full yt-dlp JSON metadata for a single video (equivalent to <c>yt-dlp -J</c>).
-    /// </summary>
-    public Task<JsonNode?> GetVideoInfoAsync(string videoId, CancellationToken cancellationToken)
-    {
-        var url = $"https://www.youtube.com/watch?v={videoId}";
-        return RunYtDlpJsonAsync(new[] { "-J", "--no-playlist", url }, cancellationToken);
-    }
 
     /// <summary>
     /// Returns the final playback URL for a single video using yt-dlp's own format selection.
@@ -63,7 +50,22 @@ public class YtDlpService
             return null;
         }
 
-        var playbackUrl = lines[^1];
+        var manifestUrl = lines.FirstOrDefault(IsManifestUrl);
+        if (!string.IsNullOrWhiteSpace(manifestUrl))
+        {
+            _logger.LogInformation("Resolved playback URL for {VideoId}: manifest", videoId);
+            return manifestUrl;
+        }
+
+        if (lines.Length > 1)
+        {
+            _logger.LogWarning(
+                "yt-dlp returned multiple playback URLs for {VideoId} without a single manifest-style URL.",
+                videoId);
+            return null;
+        }
+
+        var playbackUrl = lines[0];
         _logger.LogInformation("Resolved playback URL for {VideoId}: {PlaybackKind}", videoId, DescribePlaybackUrl(playbackUrl));
         return playbackUrl;
     }
@@ -150,71 +152,6 @@ public class YtDlpService
             ThumbnailUrl = thumbnailUrl,
             Type = isPlaylist ? SourceType.Playlist : SourceType.Channel
         };
-    }
-
-    /// <summary>
-    /// Merges DASH video and audio into a fragmented MP4 file that can be read while ffmpeg is still writing.
-    /// </summary>
-    public async Task<bool> MergeDashToFileAsync(
-        string videoUrl,
-        string audioUrl,
-        string outputPath,
-        CancellationToken cancellationToken)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = FfmpegPath,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        foreach (var arg in BuildFfmpegFileArguments(videoUrl, audioUrl, outputPath))
-        {
-            psi.ArgumentList.Add(arg);
-        }
-
-        _logger.LogDebug("Running ffmpeg with arguments: {Arguments}", string.Join(" ", psi.ArgumentList));
-
-        using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        using var cancellationRegistration = cancellationToken.Register(() => StopProcess(process));
-
-        try
-        {
-            process.Start();
-            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            var error = await errorTask.ConfigureAwait(false);
-
-            if (process.ExitCode != 0)
-            {
-                _logger.LogError(
-                    "ffmpeg exited with code {ExitCode} while merging DASH. Stderr: {Error}",
-                    process.ExitCode,
-                    error);
-                return false;
-            }
-
-            if (!File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
-            {
-                _logger.LogError("ffmpeg completed but produced no output file at {OutputPath}", outputPath);
-                return false;
-            }
-
-            return true;
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("Cancelled ffmpeg DASH merge for output {OutputPath}", outputPath);
-            StopProcess(process);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to run ffmpeg using binary '{FfmpegPath}'", psi.FileName);
-            StopProcess(process);
-            return false;
-        }
     }
 
     private async Task<JsonNode?> RunYtDlpJsonAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
@@ -319,8 +256,7 @@ public class YtDlpService
 
     private static string DescribePlaybackUrl(string playbackUrl)
     {
-        if (playbackUrl.Contains("manifest.googlevideo.com", StringComparison.OrdinalIgnoreCase)
-            || playbackUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase))
+        if (IsManifestUrl(playbackUrl))
         {
             return "manifest";
         }
@@ -328,47 +264,9 @@ public class YtDlpService
         return "direct media";
     }
 
-    private static IEnumerable<string> BuildFfmpegFileArguments(string videoUrl, string audioUrl, string outputPath)
-    {
-        yield return "-nostdin";
-        yield return "-hide_banner";
-        yield return "-loglevel";
-        yield return "warning";
-        yield return "-y";
-        yield return "-reconnect";
-        yield return "1";
-        yield return "-reconnect_streamed";
-        yield return "1";
-        yield return "-reconnect_delay_max";
-        yield return "2";
-        yield return "-i";
-        yield return videoUrl;
-        yield return "-i";
-        yield return audioUrl;
-        yield return "-map";
-        yield return "0:v:0";
-        yield return "-map";
-        yield return "1:a:0";
-        yield return "-c";
-        yield return "copy";
-        yield return "-movflags";
-        yield return "+frag_keyframe+empty_moov+default_base_moof";
-        yield return "-f";
-        yield return "mp4";
-        yield return outputPath;
-    }
-
-    private static void StopProcess(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch
-        {
-        }
-    }
+    private static bool IsManifestUrl(string playbackUrl)
+        => playbackUrl.Contains("manifest.googlevideo.com", StringComparison.OrdinalIgnoreCase)
+           || playbackUrl.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)
+           || playbackUrl.Contains("/api/manifest/", StringComparison.OrdinalIgnoreCase)
+           || playbackUrl.Contains(".mpd", StringComparison.OrdinalIgnoreCase);
 }

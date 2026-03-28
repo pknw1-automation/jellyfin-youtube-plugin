@@ -92,7 +92,6 @@ export default function (view) {
         Dashboard.showLoadingMsg();
         ApiClient.getPluginConfiguration(pluginUniqueId).then(function (config) {
             view.querySelector('#YtDlpPath').value = config.YtDlpPath || 'yt-dlp';
-            view.querySelector('#FfmpegPath').value = config.FfmpegPath || '';
             view.querySelector('#LibraryBasePath').value = config.LibraryBasePath || '/media/youtube';
             view.querySelector('#JellyfinBaseUrl').value = config.JellyfinBaseUrl || 'http://localhost:8096';
             view.querySelector('#CacheMinutes').value = config.CacheMinutes != null ? config.CacheMinutes : 5;
@@ -109,7 +108,6 @@ export default function (view) {
     view.querySelector('#saveBtn').addEventListener('click', function () {
         const config = {
             YtDlpPath: view.querySelector('#YtDlpPath').value.trim(),
-            FfmpegPath: view.querySelector('#FfmpegPath').value.trim(),
             LibraryBasePath: view.querySelector('#LibraryBasePath').value.trim(),
             JellyfinBaseUrl: view.querySelector('#JellyfinBaseUrl').value.trim(),
             CacheMinutes: parseInt(view.querySelector('#CacheMinutes').value, 10) || 5,

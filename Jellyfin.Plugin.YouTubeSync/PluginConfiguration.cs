@@ -16,12 +16,6 @@ public class PluginConfiguration : BasePluginConfiguration
     public string YtDlpPath { get; set; } = "yt-dlp";
 
     /// <summary>
-    /// Gets or sets the path to the ffmpeg executable.
-    /// Leave empty to use <c>ffmpeg</c> from PATH.
-    /// </summary>
-    public string FfmpegPath { get; set; } = string.Empty;
-
-    /// <summary>
     /// Gets or sets the base directory where .strm/.nfo files are written.
     /// This directory must be inside a Jellyfin library.
     /// </summary>
