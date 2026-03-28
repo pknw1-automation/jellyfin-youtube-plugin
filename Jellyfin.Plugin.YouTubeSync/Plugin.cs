@@ -35,7 +35,17 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     public static Plugin? Instance { get; private set; }
 
     /// <inheritdoc />
-    public IEnumerable<PluginPageInfo> GetPages() => Array.Empty<PluginPageInfo>();
+    public IEnumerable<PluginPageInfo> GetPages()
+    {
+        return new[]
+        {
+            new PluginPageInfo
+            {
+                Name = Name,
+                EmbeddedResourcePath = GetType().Namespace + ".Configuration.configurationpage.html"
+            }
+        };
+    }
 }
 
 /// <summary>Registers all plugin services with the Jellyfin DI container.</summary>
