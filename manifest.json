@@ -8,6 +8,14 @@
     "owner": "kingschnulli",
     "versions": [
       {
+        "version": "0.0.8.0",
+        "changelog": "Release 0.0.8.0",
+        "targetAbi": "10.11.6.0",
+        "sourceUrl": "https://github.com/kingschnulli/jellyfin-youtube-plugin/releases/download/v0.0.8/jellyfin-youtubesync_0.0.8.zip",
+        "checksum": "8660c5db681db0d194d6b30982d2e8f7",
+        "timestamp": "2026-03-28T10:28:45Z"
+      },
+      {
         "version": "0.0.7.0",
         "changelog": "Release 0.0.7.0",
         "targetAbi": "10.11.6.0",
