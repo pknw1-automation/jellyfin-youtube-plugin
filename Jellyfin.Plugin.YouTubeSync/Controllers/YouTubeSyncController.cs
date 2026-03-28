@@ -98,7 +98,7 @@ public class YouTubeSyncController : ControllerBase
         _logger.LogInformation("Streaming live DASH merge for video {VideoId}", videoId);
 
         Response.StatusCode = StatusCodes.Status200OK;
-        Response.ContentType = "video/mp4";
+        Response.ContentType = "video/mp2t";
         Response.Headers.CacheControl = "no-store";
 
         try

@@ -121,7 +121,7 @@ public class YtDlpService
     }
 
     /// <summary>
-    /// Starts an ffmpeg process that live-merges DASH video and audio into a fragmented MP4 stream.
+    /// Starts an ffmpeg process that live-merges DASH video and audio into an MPEG-TS stream.
     /// </summary>
     public FfmpegMuxSession? StartDashMux(string videoUrl, string audioUrl)
     {
@@ -232,11 +232,12 @@ public class YtDlpService
         yield return "1:a:0";
         yield return "-c";
         yield return "copy";
-        yield return "-shortest";
-        yield return "-movflags";
-        yield return "+frag_keyframe+empty_moov+default_base_moof";
+        yield return "-muxpreload";
+        yield return "0";
+        yield return "-muxdelay";
+        yield return "0";
         yield return "-f";
-        yield return "mp4";
+        yield return "mpegts";
         yield return "pipe:1";
     }
 }
