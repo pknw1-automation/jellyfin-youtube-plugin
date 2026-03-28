@@ -5,16 +5,14 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.YouTubeSync;
 
 /// <summary>
-/// Selects the best Jellyfin-compatible (progressive, H.264/AAC, ≤1080p) format
+/// Selects the best Jellyfin-compatible (progressive, ≤1080p) format
 /// from a yt-dlp JSON response.
 ///
-/// Selection priority:
-///   1. Progressive streams (video + audio in one file) – DASH-only videos are rejected.
-///   2. Container: MP4.
-///   3. Video codec: AVC / H.264 (vcodec starts with "avc").
-///   4. Audio codec: AAC / mp4a (acodec starts with "mp4a").
-///   5. Height ≤1080p.
-///   6. Highest resolution first, then highest bitrate.
+/// Selection uses a tiered fallback strategy (mirrors <c>b[ext=mp4][height&lt;=1080]/b[ext=mp4][height&lt;=720]/b</c>):
+///   Tier 1: Progressive MP4 stream ≤1080p  – highest resolution, then highest bitrate.
+///   Tier 2: Progressive MP4 stream ≤720p   – fallback when no ≤1080p MP4 exists.
+///   Tier 3: Any progressive stream          – last resort when no MP4 is available.
+///   DASH-only (split video/audio) streams are always rejected.
 /// </summary>
 public class FormatSelector
 {
@@ -39,21 +37,18 @@ public class FormatSelector
             return null;
         }
 
-        var best = formats
-            .Where(f => f is not null)
-            .Where(IsProgressive)
-            .Where(IsMp4)
-            .Where(IsAvcAac)
-            .Where(IsAtMost1080p)
-            .OrderByDescending(f => GetInt(f, "height"))
-            .ThenByDescending(f => GetDouble(f, "tbr"))
-            .FirstOrDefault();
+        // Tier 1: best progressive MP4 ≤1080p (mirrors: b[ext=mp4][height<=1080])
+        var best = PickBest(formats, requireMp4: true, maxHeight: 1080)
+            // Tier 2: best progressive MP4 ≤720p (mirrors: b[ext=mp4][height<=720])
+            ?? PickBest(formats, requireMp4: true, maxHeight: 720)
+            // Tier 3: best progressive stream of any container (mirrors: b)
+            ?? PickBest(formats, requireMp4: false, maxHeight: null);
 
         if (best is null)
         {
             _logger.LogInformation(
-                "No progressive AVC/AAC MP4 format ≤1080p found. "
-                + "Only DASH or non-H.264 streams are available. "
+                "No progressive format found. "
+                + "Only DASH or split streams are available. "
                 + "DASH proxy is not supported in v1.");
             return null;
         }
@@ -68,6 +63,29 @@ public class FormatSelector
         return url;
     }
 
+    private static JsonNode? PickBest(JsonArray formats, bool requireMp4, int? maxHeight)
+    {
+        var query = formats
+            .Where(f => f is not null)
+            .Where(IsProgressive);
+
+        if (requireMp4)
+        {
+            query = query.Where(IsMp4);
+        }
+
+        if (maxHeight.HasValue)
+        {
+            var limit = maxHeight.Value;
+            query = query.Where(f => GetInt(f, "height") <= limit);
+        }
+
+        return query
+            .OrderByDescending(f => GetInt(f, "height"))
+            .ThenByDescending(f => GetDouble(f, "tbr"))
+            .FirstOrDefault();
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private static bool IsProgressive(JsonNode? f)
@@ -80,17 +98,6 @@ public class FormatSelector
 
     private static bool IsMp4(JsonNode? f)
         => GetString(f, "ext") == "mp4";
-
-    private static bool IsAvcAac(JsonNode? f)
-    {
-        var vcodec = GetString(f, "vcodec");
-        var acodec = GetString(f, "acodec");
-        return vcodec.StartsWith("avc", System.StringComparison.OrdinalIgnoreCase)
-            && acodec.StartsWith("mp4a", System.StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsAtMost1080p(JsonNode? f)
-        => GetInt(f, "height") <= 1080;
 
     private static string GetString(JsonNode? node, string key)
     {
