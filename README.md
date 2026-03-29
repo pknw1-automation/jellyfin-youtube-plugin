@@ -16,6 +16,10 @@ via **yt-dlp**, without pre-downloading any content.
    URL for a configurable number of minutes, and returns an **HTTP 302** redirect. The resolved
    URL may be a direct media URL or a manifest URL that Jellyfin can open itself.
 
+3. **Managed transcoding mode (optional)** – when enabled, the resolver first tries to build
+   a disk-backed local HLS session using `ffmpeg` and higher-quality YouTube inputs. If session
+   startup fails for any reason, the plugin falls back to the standard redirect-only resolver.
+
 ## Requirements
 
 | Dependency | Notes |
@@ -90,6 +94,11 @@ managed through the UI — no manual file editing is required.
 | CDN URL cache duration | `5` min | How long a resolved CDN URL is cached in memory before being re-fetched |
 | Playback target | `Broad compatibility` | Chooses whether yt-dlp should prefer a safer 720p MP4, a balanced 1080p target, or maximum available quality |
 | Max videos per source | `200` | Maximum number of videos to sync per channel or playlist (0 = unlimited) |
+| Managed transcoding | `Disabled` | Opt-in ffmpeg-backed playback path that tries to generate a local HLS session before falling back to direct redirect |
+| ffmpeg executable path | `ffmpeg` | Path to the ffmpeg binary used for managed transcoding |
+| Hardware acceleration | `Software` | Encoder used for managed sessions (`Software`, `QSV`, `NVENC`, `VAAPI`, `AMF`) |
+| Managed session idle minutes | `2` | Idle timeout before a managed ffmpeg session is stopped and deleted |
+| Max concurrent managed sessions | `2` | New playback requests fall back to the lightweight direct path once this limit is reached |
 
 ### Playback target guidance
 
@@ -98,6 +107,12 @@ managed through the UI — no manual file editing is required.
 | Broad compatibility (prefer 720p MP4) | Best default for mixed clients. Prefers a plain 720p MP4 stream when available, which avoids fragile HLS remux paths on some Jellyfin clients. |
 | Balanced (allow up to 1080p) | Good fit when desktop and native clients matter more than edge-case compatibility. May resolve manifest-based playback URLs. |
 | Maximum quality | Lets yt-dlp choose the best combined stream it can expose. Highest quality, lowest predictability across clients. |
+
+### Managed transcoding guidance
+
+- Leave managed transcoding disabled if you want the original lightweight v1 behavior.
+- Managed transcoding is designed as a best-effort enhancement. If ffmpeg or the selected hardware encoder cannot start, the plugin falls back to the direct redirect path automatically.
+- The initial managed profile normalizes playback to a local HLS stream using H.264 video and AAC audio for broader client compatibility.
 
 ### Adding a source (channel or playlist)
 
@@ -127,5 +142,6 @@ The plugin targets **`targetAbi: 10.11.6.0`**.  To run on a different version:
 - Broad compatibility mode is intentionally conservative and may cap many videos at 720p to keep playback stable across more Jellyfin clients.
 - Progressive H.264/AAC streams are typically available only up to 720 p on YouTube; 1080p
    progressive is rare, so 1080p and higher targets often resolve to manifest-based playback URLs instead.
+- Managed transcoding currently ships as one universal 1080p HLS profile. It is intentionally narrow to keep the default lightweight path untouched and to make failure fall back cleanly.
 - No cookie support – age-restricted or member-only videos will not resolve.
 

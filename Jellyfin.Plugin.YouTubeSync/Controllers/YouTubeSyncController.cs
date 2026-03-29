@@ -1,4 +1,5 @@
 using System.Net.Mime;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -23,16 +24,19 @@ namespace Jellyfin.Plugin.YouTubeSync.Controllers;
 public class YouTubeSyncController : ControllerBase
 {
     private readonly ResolveService _resolveService;
+    private readonly ManagedTranscodeService _managedTranscodeService;
     private readonly YtDlpService _ytDlpService;
     private readonly ILogger<YouTubeSyncController> _logger;
 
     /// <summary>Initializes a new instance of the <see cref="YouTubeSyncController"/> class.</summary>
     public YouTubeSyncController(
         ResolveService resolveService,
+        ManagedTranscodeService managedTranscodeService,
         YtDlpService ytDlpService,
         ILogger<YouTubeSyncController> logger)
     {
         _resolveService = resolveService;
+        _managedTranscodeService = managedTranscodeService;
         _ytDlpService = ytDlpService;
         _logger = logger;
     }
@@ -57,6 +61,18 @@ public class YouTubeSyncController : ControllerBase
 
         _logger.LogInformation("Resolve request for video {VideoId}", videoId);
 
+        if (Plugin.Instance?.Configuration.AllowManagedTranscoding == true)
+        {
+            var sessionPath = await _managedTranscodeService.TryCreateSessionAsync(videoId, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(sessionPath))
+            {
+                _logger.LogInformation("Using managed transcoding session for video {VideoId}", videoId);
+                return LocalRedirect(sessionPath);
+            }
+
+            _logger.LogInformation("Managed transcoding unavailable for {VideoId}; falling back to direct resolve path.", videoId);
+        }
+
         var url = await _resolveService.ResolveAsync(videoId, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(url))
         {
@@ -69,6 +85,22 @@ public class YouTubeSyncController : ControllerBase
         }
 
         return Redirect(url);
+    }
+
+    /// <summary>
+    /// Serves managed-transcoding HLS playlists and segment files.
+    /// </summary>
+    [HttpGet("session/{sessionId}/{fileName}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetManagedSessionFile(string sessionId, string fileName)
+    {
+        if (!_managedTranscodeService.TryGetSessionFile(sessionId, fileName, out var filePath, out var contentType))
+        {
+            return NotFound();
+        }
+
+        return PhysicalFile(filePath, contentType, enableRangeProcessing: false);
     }
 
     /// <summary>

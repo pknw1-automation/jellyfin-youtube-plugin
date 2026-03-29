@@ -17,6 +17,7 @@ public class YtDlpService
     private const string BroadCompatibility720pSelector = "b[protocol!*=m3u8][ext=mp4][height=720]/b[protocol!*=m3u8][ext=mp4][height<=720]/b[height=720]/b[height<=720]";
     private const string Balanced1080pSelector = "b[height=1080]/b[height=720]/b[height<=1080]/b[height<=720]/b";
     private const string MaximumQualitySelector = "b";
+    private const string ManagedPlaybackInputSelector = "bv*[height<=1080][vcodec^=avc1]+ba[acodec^=mp4a]/bv*[height<=1080]+ba/b[height<=1080]/b";
 
     private readonly ILogger<YtDlpService> _logger;
 
@@ -79,6 +80,40 @@ public class YtDlpService
             DescribePlaybackUrl(playbackUrl),
             playbackTarget);
         return playbackUrl;
+    }
+
+    /// <summary>
+    /// Returns the input URLs used by the managed transcoding pipeline.
+    /// Prefers separate AVC video and AAC audio inputs up to 1080p.
+    /// </summary>
+    public async Task<ManagedPlaybackInput?> GetManagedPlaybackInputAsync(string videoId, CancellationToken cancellationToken)
+    {
+        var url = $"https://www.youtube.com/watch?v={videoId}";
+        var result = await RunYtDlpTextAsync(
+            new[] { "-f", ManagedPlaybackInputSelector, "--get-url", "--no-playlist", url },
+            cancellationToken).ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(result))
+        {
+            return null;
+        }
+
+        var lines = result
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (lines.Length == 0)
+        {
+            return null;
+        }
+
+        if (lines.Length == 1)
+        {
+            _logger.LogInformation("Resolved managed playback input for {VideoId}: combined", videoId);
+            return new ManagedPlaybackInput(lines[0], null);
+        }
+
+        _logger.LogInformation("Resolved managed playback input for {VideoId}: separate video+audio", videoId);
+        return new ManagedPlaybackInput(lines[0], lines[1]);
     }
 
     /// <summary>Gets the currently configured playback target.</summary>

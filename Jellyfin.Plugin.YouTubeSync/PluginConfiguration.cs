@@ -16,6 +16,25 @@ public static class PlaybackTargets
     public const string MaximumQuality = "MaximumQuality";
 }
 
+/// <summary>Named hardware acceleration modes for the managed transcoding pipeline.</summary>
+public static class ManagedTranscodeHardwareModes
+{
+    /// <summary>Use software encoding.</summary>
+    public const string None = "None";
+
+    /// <summary>Use Intel Quick Sync if available.</summary>
+    public const string Qsv = "Qsv";
+
+    /// <summary>Use NVIDIA NVENC if available.</summary>
+    public const string Nvenc = "Nvenc";
+
+    /// <summary>Use VAAPI if available.</summary>
+    public const string Vaapi = "Vaapi";
+
+    /// <summary>Use AMD AMF if available.</summary>
+    public const string Amf = "Amf";
+}
+
 /// <summary>Holds all user-configurable settings for the YouTubeSync plugin.</summary>
 public class PluginConfiguration : BasePluginConfiguration
 {
@@ -56,4 +75,31 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Set to 0 for no limit (not recommended for large channels).
     /// </summary>
     public int MaxVideosPerSource { get; set; } = 200;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether managed ffmpeg transcoding is enabled.
+    /// When disabled, the plugin always uses the lightweight redirect-only path.
+    /// </summary>
+    public bool AllowManagedTranscoding { get; set; }
+
+    /// <summary>
+    /// Gets or sets the path to the ffmpeg executable used for managed transcoding.
+    /// Defaults to "ffmpeg" and expects it to be available on PATH.
+    /// </summary>
+    public string FfmpegPath { get; set; } = "ffmpeg";
+
+    /// <summary>
+    /// Gets or sets the managed transcoding hardware acceleration mode.
+    /// </summary>
+    public string ManagedTranscodeHardwareMode { get; set; } = ManagedTranscodeHardwareModes.None;
+
+    /// <summary>
+    /// Gets or sets how many minutes an idle managed transcoding session is kept alive.
+    /// </summary>
+    public int ManagedTranscodeSessionIdleMinutes { get; set; } = 2;
+
+    /// <summary>
+    /// Gets or sets the maximum number of concurrent managed transcoding sessions.
+    /// </summary>
+    public int MaxConcurrentManagedTranscodes { get; set; } = 2;
 }

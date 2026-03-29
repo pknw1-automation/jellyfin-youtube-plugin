@@ -97,6 +97,11 @@ export default function (view) {
             view.querySelector('#CacheMinutes').value = config.CacheMinutes != null ? config.CacheMinutes : 5;
             view.querySelector('#PlaybackTarget').value = config.PlaybackTarget || 'BroadCompatibility720p';
             view.querySelector('#MaxVideosPerSource').value = config.MaxVideosPerSource != null ? config.MaxVideosPerSource : 200;
+            view.querySelector('#AllowManagedTranscoding').value = String(config.AllowManagedTranscoding === true);
+            view.querySelector('#FfmpegPath').value = config.FfmpegPath || 'ffmpeg';
+            view.querySelector('#ManagedTranscodeHardwareMode').value = config.ManagedTranscodeHardwareMode || 'None';
+            view.querySelector('#ManagedTranscodeSessionIdleMinutes').value = config.ManagedTranscodeSessionIdleMinutes != null ? config.ManagedTranscodeSessionIdleMinutes : 2;
+            view.querySelector('#MaxConcurrentManagedTranscodes').value = config.MaxConcurrentManagedTranscodes != null ? config.MaxConcurrentManagedTranscodes : 2;
             sources = config.Sources || [];
             renderSources();
             Dashboard.hideLoadingMsg();
@@ -114,6 +119,11 @@ export default function (view) {
             CacheMinutes: parseInt(view.querySelector('#CacheMinutes').value, 10) || 5,
             PlaybackTarget: view.querySelector('#PlaybackTarget').value,
             MaxVideosPerSource: parseInt(view.querySelector('#MaxVideosPerSource').value, 10) || 0,
+            AllowManagedTranscoding: view.querySelector('#AllowManagedTranscoding').value === 'true',
+            FfmpegPath: view.querySelector('#FfmpegPath').value.trim(),
+            ManagedTranscodeHardwareMode: view.querySelector('#ManagedTranscodeHardwareMode').value,
+            ManagedTranscodeSessionIdleMinutes: parseInt(view.querySelector('#ManagedTranscodeSessionIdleMinutes').value, 10) || 2,
+            MaxConcurrentManagedTranscodes: parseInt(view.querySelector('#MaxConcurrentManagedTranscodes').value, 10) || 2,
             Sources: sources
         };
 

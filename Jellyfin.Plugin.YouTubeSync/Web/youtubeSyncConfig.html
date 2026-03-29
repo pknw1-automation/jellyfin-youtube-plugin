@@ -47,6 +47,44 @@
                 </div>
             </div>
 
+            <div class="verticalSection">
+                <h3 class="sectionTitle">Managed Transcoding</h3>
+
+                <div class="inputContainer">
+                    <select is="emby-select" id="AllowManagedTranscoding" label="Managed transcoding">
+                        <option value="false">Disabled (keep lightweight direct redirect path)</option>
+                        <option value="true">Enabled (try ffmpeg HLS session first, then fall back)</option>
+                    </select>
+                    <div class="fieldDescription">Off by default. When enabled, the plugin tries to build a local ffmpeg-backed HLS session for sharper playback and falls back to the current redirect-only path on failure.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <input is="emby-input" type="text" id="FfmpegPath" label="ffmpeg executable path" />
+                    <div class="fieldDescription">Path to the ffmpeg binary used for managed transcoding. Use <code>ffmpeg</code> if it is available on PATH.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <select is="emby-select" id="ManagedTranscodeHardwareMode" label="Hardware acceleration">
+                        <option value="None">Software (libx264)</option>
+                        <option value="Qsv">Intel QSV</option>
+                        <option value="Nvenc">NVIDIA NVENC</option>
+                        <option value="Vaapi">VAAPI</option>
+                        <option value="Amf">AMD AMF</option>
+                    </select>
+                    <div class="fieldDescription">Choose the encoder used for managed sessions. Start with software if you are unsure, then switch to the hardware encoder your server already uses successfully.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <input is="emby-input" type="number" id="ManagedTranscodeSessionIdleMinutes" label="Managed session idle minutes" min="1" max="30" />
+                    <div class="fieldDescription">Idle managed sessions are stopped and deleted automatically after this many minutes.</div>
+                </div>
+
+                <div class="inputContainer">
+                    <input is="emby-input" type="number" id="MaxConcurrentManagedTranscodes" label="Max concurrent managed sessions" min="1" max="10" />
+                    <div class="fieldDescription">When the limit is reached, the plugin falls back to the direct lightweight path for new playbacks.</div>
+                </div>
+            </div>
+
             <!-- YouTube sources list -->
             <div class="verticalSection">
                 <div class="sectionTitleContainer flex align-items-center">

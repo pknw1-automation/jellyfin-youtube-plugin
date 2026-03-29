@@ -62,6 +62,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     {
         serviceCollection.AddSingleton<YtDlpService>();
         serviceCollection.AddSingleton<SimpleResolveCache>();
+        serviceCollection.AddSingleton<ManagedTranscodeService>();
         serviceCollection.AddSingleton<ResolveService>();
         serviceCollection.AddSingleton<SyncService>();
         serviceCollection.AddSingleton<IScheduledTask, SyncTask>();
