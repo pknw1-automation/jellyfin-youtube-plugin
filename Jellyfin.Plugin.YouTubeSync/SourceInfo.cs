@@ -14,4 +14,7 @@ public sealed class SourceInfo
 
     /// <summary>Gets or sets the detected source type (Channel or Playlist).</summary>
     public SourceType Type { get; set; } = SourceType.Channel;
+    
+    /// <summary>Gets or sets the URL of a wider banner or poster-style image when available.</summary>
+    public string PosterUrl { get; set; } = string.Empty;
 }

@@ -70,11 +70,12 @@ public class SyncService
         var thumbnailUrl = string.IsNullOrWhiteSpace(source.ThumbnailUrl)
             ? sourceInfo?.ThumbnailUrl ?? string.Empty
             : source.ThumbnailUrl;
+        var posterUrl = sourceInfo?.PosterUrl ?? thumbnailUrl;
 
         var sourceDir = Path.Combine(config.LibraryBasePath, SanitizeFileName(name));
 
         Directory.CreateDirectory(sourceDir);
-        await WriteSourceMetadataAsync(source, sourceDir, name, description, thumbnailUrl, cancellationToken).ConfigureAwait(false);
+        await WriteSourceMetadataAsync(source, sourceDir, name, description, thumbnailUrl, posterUrl, cancellationToken).ConfigureAwait(false);
 
         var entries = await _ytDlpService
             .GetPlaylistEntriesAsync(source.Url, config.VideoRetentionDays, cancellationToken)
@@ -248,6 +249,7 @@ public class SyncService
         string name,
         string description,
         string thumbnailUrl,
+        string posterUrl,
         CancellationToken cancellationToken)
     {
         bool isSeries = source.Type == SourceType.Channel || source.Mode == SourceMode.Series;
@@ -259,7 +261,8 @@ public class SyncService
             : BuildCollectionNfo(source, name, description, thumbnailUrl);
 
         await File.WriteAllTextAsync(nfoPath, content, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
-        await DownloadArtworkAsync(thumbnailUrl, dir, new[] { "folder", "poster" }, cancellationToken).ConfigureAwait(false);
+        await DownloadArtworkAsync(thumbnailUrl, dir, new[] { "folder" }, cancellationToken).ConfigureAwait(false);
+        await DownloadArtworkAsync(string.IsNullOrWhiteSpace(posterUrl) ? thumbnailUrl : posterUrl, dir, new[] { "poster" }, cancellationToken).ConfigureAwait(false);
     }
 
     private static string BuildTvShowNfo(SourceDefinition source, string name, string description, string thumbnailUrl)
@@ -457,7 +460,7 @@ public class SyncService
             return null;
         }
 
-        return publishedUtc?.Year ?? 0;
+        return publishedUtc?.Year;
     }
 
     private static string GetSeasonFolderName(DateTime? publishedUtc, SourceMode sourceMode)
@@ -467,7 +470,7 @@ public class SyncService
             return string.Empty;
         }
 
-        return publishedUtc is DateTime date ? $"Season {date.Year}" : "Season 0";
+        return publishedUtc is DateTime date ? $"Season {date.Year}" : "Unknown Year";
     }
 
     private static string BuildVideoFolderName(string title, string videoId)
@@ -501,7 +504,10 @@ public class SyncService
         {
             if (!Path.GetFileName(seasonDirectory).StartsWith("Season ", StringComparison.OrdinalIgnoreCase))
             {
-                continue;
+                if (!Path.GetFileName(seasonDirectory).Equals("Unknown Year", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
             }
 
             if (!desiredSeasonDirectories.Contains(seasonDirectory))
