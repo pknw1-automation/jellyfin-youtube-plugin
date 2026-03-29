@@ -146,9 +146,16 @@ public class YtDlpService
     public async Task<IReadOnlyList<JsonNode>> GetPlaylistEntriesAsync(
         string playlistUrl,
         int videoRetentionDays,
+        int maxEntryScanCount,
         CancellationToken cancellationToken)
     {
         var args = new List<string> { "--flat-playlist", "-J" };
+        if (maxEntryScanCount > 0)
+        {
+            args.Add("--playlist-end");
+            args.Add(maxEntryScanCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
         if (videoRetentionDays > 0)
         {
             args.Add("--dateafter");

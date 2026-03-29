@@ -20,6 +20,8 @@ namespace Jellyfin.Plugin.YouTubeSync;
 public class SyncService
 {
     private const int MaxPerSourceConcurrency = 4;
+    private const int MinimumRetentionEntryScanCount = 25;
+    private const int EstimatedUploadsPerDayForRetentionScan = 5;
     private static readonly TimeSpan ArtworkDownloadTimeout = TimeSpan.FromSeconds(20);
 
     private static readonly HttpClient HttpClient = new();
@@ -87,8 +89,18 @@ public class SyncService
         Directory.CreateDirectory(sourceDir);
         await WriteSourceMetadataAsync(source, sourceDir, name, description, thumbnailUrl, posterUrl, cancellationToken).ConfigureAwait(false);
 
+        var maxEntryScanCount = GetMaxEntryScanCount(config.VideoRetentionDays, config.MaxVideosPerSource);
+        if (maxEntryScanCount > 0)
+        {
+            _logger.LogInformation(
+                "Applying upfront entry scan limit {MaxEntryScanCount} for source '{Name}' with retention {RetentionDays} day(s).",
+                maxEntryScanCount,
+                name,
+                config.VideoRetentionDays);
+        }
+
         var entries = await _ytDlpService
-            .GetPlaylistEntriesAsync(source.Url, config.VideoRetentionDays, cancellationToken)
+            .GetPlaylistEntriesAsync(source.Url, config.VideoRetentionDays, maxEntryScanCount, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -747,6 +759,25 @@ public class SyncService
                 completed,
                 total);
         }
+    }
+
+    private static int GetMaxEntryScanCount(int videoRetentionDays, int maxVideosPerSource)
+    {
+        if (videoRetentionDays <= 0)
+        {
+            return 0;
+        }
+
+        var retentionBasedLimit = Math.Max(
+            MinimumRetentionEntryScanCount,
+            videoRetentionDays * EstimatedUploadsPerDayForRetentionScan);
+
+        if (maxVideosPerSource > 0)
+        {
+            return Math.Min(retentionBasedLimit, maxVideosPerSource);
+        }
+
+        return retentionBasedLimit;
     }
 
     private static string BuildDateTag(string tagName, DateTime? date)
