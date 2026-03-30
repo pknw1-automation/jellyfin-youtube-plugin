@@ -5,6 +5,12 @@ export default function (view) {
     let sources = [];
     let editIndex = -1;
 
+    function updateFeedVisibility() {
+        const isChannel = view.querySelector('#editSourceType').value === 'Channel';
+        const feedContainer = view.querySelector('#editSourceFeedContainer');
+        feedContainer.style.display = isChannel ? '' : 'none';
+    }
+
     /* ── helpers ─────────────────────────────────────────── */
 
     function escapeHtml(str) {
@@ -33,11 +39,14 @@ export default function (view) {
         list.innerHTML = sources.map(function (s, i) {
             const contentType = s.Type === 'Playlist' ? 'Playlist' : 'Channel';
             const appearance = s.Mode === 'Movies' ? 'Separate movies' : 'Episodes in a series';
+            const feed = s.Type === 'Channel' ? (s.Feed || 'Videos') : null;
             return '<div class="listItem listItem-border" style="display:flex;align-items:center;padding:.75em 1em;gap:1em;">'
                 + '<div style="flex:1;min-width:0;">'
                 + '<div style="font-weight:600;">' + escapeHtml(s.Name || s.Id) + '</div>'
                 + '<div class="fieldDescription" style="margin:0;">'
-                + escapeHtml(contentType) + ' &bull; ' + escapeHtml(appearance) + ' &bull; '
+                + escapeHtml(contentType)
+                + (feed ? ' &bull; ' + escapeHtml(feed) : '')
+                + ' &bull; ' + escapeHtml(appearance) + ' &bull; '
                 + escapeHtml(s.Id)
                 + '</div>'
                 + (s.Description
@@ -70,14 +79,16 @@ export default function (view) {
         editIndex = index;
         const s = index >= 0
             ? sources[index]
-            : { Id: '', Name: '', Type: 'Channel', Mode: 'Series', Description: '' };
+            : { Id: '', Name: '', Type: 'Channel', Feed: 'Videos', Mode: 'Series', Description: '' };
 
         view.querySelector('#editSourceTitle').textContent = index >= 0 ? 'Edit Channel or Playlist' : 'Add Channel or Playlist';
         view.querySelector('#editSourceUrl').value = s.Id;
         view.querySelector('#editSourceName').value = s.Name;
         view.querySelector('#editSourceType').value = s.Type;
+        view.querySelector('#editSourceFeed').value = s.Feed || 'Videos';
         view.querySelector('#editSourceMode').value = s.Mode;
         view.querySelector('#editSourceDescription').value = s.Description;
+        updateFeedVisibility();
 
         view.querySelector('#sourceEditSection').style.removeProperty('display');
         view.querySelector('#sourceEditSection').scrollIntoView({ behavior: 'smooth' });
@@ -148,7 +159,10 @@ export default function (view) {
     view.querySelector('#editSourceUrl').addEventListener('input', function () {
         const detected = detectSourceType(this.value.trim());
         view.querySelector('#editSourceType').value = detected;
+        updateFeedVisibility();
     });
+
+    view.querySelector('#editSourceType').addEventListener('change', updateFeedVisibility);
 
     view.querySelector('#saveSourceBtn').addEventListener('click', function () {
         const id = view.querySelector('#editSourceUrl').value.trim();
@@ -163,6 +177,9 @@ export default function (view) {
                 Id: id,
                 Name: name,
                 Type: view.querySelector('#editSourceType').value,
+                Feed: view.querySelector('#editSourceType').value === 'Channel'
+                    ? view.querySelector('#editSourceFeed').value
+                    : 'Videos',
                 Mode: view.querySelector('#editSourceMode').value,
                 Description: description
             };

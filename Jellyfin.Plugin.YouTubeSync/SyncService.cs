@@ -19,6 +19,8 @@ namespace Jellyfin.Plugin.YouTubeSync;
 /// </summary>
 public class SyncService
 {
+    private sealed record PlaylistSeasonDefinition(string PlaylistId, string Title, int SeasonNumber);
+
     private const int MaxPerSourceConcurrency = 4;
     private const int MinimumRetentionEntryScanCount = 25;
     private const int EstimatedUploadsPerDayForRetentionScan = 5;
@@ -87,9 +89,6 @@ public class SyncService
 
         _logger.LogInformation("Starting sync for source '{Name}'", name);
 
-        Directory.CreateDirectory(sourceDir);
-        await WriteSourceMetadataAsync(source, sourceDir, name, description, thumbnailUrl, posterUrl, cancellationToken).ConfigureAwait(false);
-
         var maxEntryScanCount = GetMaxEntryScanCount(config.VideoRetentionDays, config.MaxVideosPerSource);
         if (maxEntryScanCount > 0)
         {
@@ -102,6 +101,27 @@ public class SyncService
 
         var entries = await _ytDlpService
             .GetPlaylistEntriesAsync(source.Url, config.VideoRetentionDays, maxEntryScanCount, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<PlaylistSeasonDefinition> playlistSeasonDefinitions = Array.Empty<PlaylistSeasonDefinition>();
+
+        if (source.Type == SourceType.Channel && source.Feed == ChannelFeed.Playlists)
+        {
+            playlistSeasonDefinitions = BuildPlaylistSeasonDefinitions(entries);
+            entries = await ExpandChannelPlaylistsAsync(entries, playlistSeasonDefinitions, config.VideoRetentionDays, maxEntryScanCount, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        Directory.CreateDirectory(sourceDir);
+        await WriteSourceMetadataAsync(
+                source,
+                sourceDir,
+                name,
+                description,
+                thumbnailUrl,
+                posterUrl,
+                playlistSeasonDefinitions,
+                cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -161,7 +181,7 @@ public class SyncService
 
                         videos.Add(metadata);
 
-                        var seasonFolder = GetSeasonFolderName(metadata.PublishedUtc, source.Mode);
+                        var seasonFolder = GetSeasonFolderName(metadata, source);
                         var parentDir = string.IsNullOrEmpty(seasonFolder)
                             ? sourceDir
                             : Path.Combine(sourceDir, seasonFolder);
@@ -202,7 +222,7 @@ public class SyncService
             retainedVideos.Count,
             name);
 
-        var seasonEpisodeCounters = BuildSeasonEpisodeCounters(retainedVideos, source.Mode);
+        var seasonEpisodeCounters = BuildSeasonEpisodeCounters(retainedVideos, source);
         var filesWritten = 0;
 
         await Parallel.ForEachAsync(
@@ -216,13 +236,13 @@ public class SyncService
                 {
                     try
                     {
-                        var seasonFolder = GetSeasonFolderName(video.PublishedUtc, source.Mode);
+                        var seasonFolder = GetSeasonFolderName(video, source);
                         var parentDir = string.IsNullOrEmpty(seasonFolder)
                             ? sourceDir
                             : Path.Combine(sourceDir, seasonFolder);
                         var videoDir = Path.Combine(parentDir, BuildVideoFolderName(video.Title, video.VideoId));
-                        var seasonNumber = GetSeasonNumber(video.PublishedUtc, source.Mode);
-                        var episodeNumber = GetEpisodeNumber(video, seasonEpisodeCounters, source.Mode);
+                        var seasonNumber = GetSeasonNumber(video, source);
+                        var episodeNumber = GetEpisodeNumber(video, seasonEpisodeCounters, source);
 
                         await WriteVideoFilesAsync(
                                 video,
@@ -330,6 +350,7 @@ public class SyncService
         string description,
         string thumbnailUrl,
         string posterUrl,
+        IReadOnlyList<PlaylistSeasonDefinition> playlistSeasonDefinitions,
         CancellationToken cancellationToken)
     {
         bool isSeries = source.Type == SourceType.Channel || source.Mode == SourceMode.Series;
@@ -337,7 +358,7 @@ public class SyncService
         var nfoPath = Path.Combine(dir, nfoFileName);
 
         var content = isSeries
-            ? BuildTvShowNfo(source, name, description, thumbnailUrl)
+            ? BuildTvShowNfo(source, name, description, thumbnailUrl, playlistSeasonDefinitions)
             : BuildCollectionNfo(source, name, description, thumbnailUrl);
 
         await File.WriteAllTextAsync(nfoPath, content, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
@@ -355,18 +376,28 @@ public class SyncService
         }
     }
 
-    private static string BuildTvShowNfo(SourceDefinition source, string name, string description, string thumbnailUrl)
+    private static string BuildTvShowNfo(
+        SourceDefinition source,
+        string name,
+        string description,
+        string thumbnailUrl,
+        IReadOnlyList<PlaylistSeasonDefinition> playlistSeasonDefinitions)
     {
         var thumb = string.IsNullOrEmpty(thumbnailUrl)
             ? string.Empty
             : $"\n  <thumb aspect=\"poster\">{Xml(thumbnailUrl)}</thumb>";
+        var namedSeasons = playlistSeasonDefinitions.Count == 0
+            ? string.Empty
+            : string.Concat(
+                playlistSeasonDefinitions.Select(definition =>
+                    $"\n  <namedseason number=\"{definition.SeasonNumber}\">{Xml(definition.Title)}</namedseason>"));
 
         return $"""
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <tvshow>
           <title>{Xml(name)}</title>
           <plot>{Xml(description)}</plot>
-          <uniqueid type="youtube" default="true">{Xml(source.Id)}</uniqueid>{thumb}
+          <uniqueid type="youtube" default="true">{Xml(source.Id)}</uniqueid>{thumb}{namedSeasons}
         </tvshow>
         """;
     }
@@ -405,7 +436,7 @@ public class SyncService
           <title>{Xml(video.Title)}</title>
           <showtitle>{Xml(sourceName)}</showtitle>
           <plot>{Xml(video.Description)}</plot>
-          <uniqueid type="youtube" default="true">{Xml(video.VideoId)}</uniqueid>{aired}{premiered}{season}{episode}{runtime}{studio}{thumb}
+                    <uniqueid type="youtube" default="true">{Xml(video.SyncId)}</uniqueid>{aired}{premiered}{season}{episode}{runtime}{studio}{thumb}
         </episodedetails>
         """;
     }
@@ -425,7 +456,7 @@ public class SyncService
         <movie>
           <title>{Xml(video.Title)}</title>
           <plot>{Xml(video.Description)}</plot>
-          <uniqueid type="youtube" default="true">{Xml(video.VideoId)}</uniqueid>{premiered}{runtime}{studio}{set}{thumb}
+                    <uniqueid type="youtube" default="true">{Xml(video.SyncId)}</uniqueid>{premiered}{runtime}{studio}{set}{thumb}
         </movie>
         """;
     }
@@ -438,15 +469,26 @@ public class SyncService
         catch { return string.Empty; }
     }
 
+    private static int? GetNullableInt(JsonNode? node, string key)
+    {
+        try { return node?[key]?.GetValue<int>(); }
+        catch { return null; }
+    }
+
     private static VideoMetadata BuildFallbackVideoMetadata(JsonNode entry, string videoId, string sourceName)
     {
         return new VideoMetadata
         {
             VideoId = videoId,
+            SyncId = GetString(entry, "__sync_id"),
             Title = GetString(entry, "title"),
             Description = GetString(entry, "description"),
             ThumbnailUrl = GetFallbackVideoThumbnailUrl(entry),
             ChannelName = sourceName,
+            PlaylistId = GetString(entry, "__playlist_id"),
+            PlaylistTitle = GetString(entry, "__playlist_title"),
+            PlaylistSeasonNumber = GetNullableInt(entry, "__playlist_season_number"),
+            PlaylistEpisodeNumber = GetNullableInt(entry, "__playlist_episode_number"),
             PublishedUtc = YtDlpService.ParsePublishedDate(entry)
         };
     }
@@ -462,8 +504,173 @@ public class SyncService
         return GetString(entry, "thumbnail");
     }
 
+    private async Task<IReadOnlyList<JsonNode>> ExpandChannelPlaylistsAsync(
+        IReadOnlyList<JsonNode> playlistEntries,
+        IReadOnlyList<PlaylistSeasonDefinition> playlistSeasonDefinitions,
+        int videoRetentionDays,
+        int maxEntryScanCount,
+        CancellationToken cancellationToken)
+    {
+        var expandedEntries = new List<JsonNode>();
+        var discoveredPlaylists = 0;
+        var seasonLookup = playlistSeasonDefinitions.ToDictionary(definition => definition.PlaylistId, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var playlistEntry in playlistEntries)
+        {
+            var playlistUrl = GetChannelPlaylistUrl(playlistEntry);
+            if (string.IsNullOrWhiteSpace(playlistUrl))
+            {
+                continue;
+            }
+
+            var playlistId = GetChannelPlaylistId(playlistEntry);
+            if (string.IsNullOrWhiteSpace(playlistId)
+                || !seasonLookup.TryGetValue(playlistId, out var seasonDefinition))
+            {
+                continue;
+            }
+
+            discoveredPlaylists++;
+            var playlistVideos = await _ytDlpService
+                .GetPlaylistEntriesAsync(playlistUrl, videoRetentionDays, maxEntryScanCount, cancellationToken)
+                .ConfigureAwait(false);
+
+            for (var index = 0; index < playlistVideos.Count; index++)
+            {
+                var videoEntry = playlistVideos[index];
+                var videoId = GetString(videoEntry, "id");
+                if (string.IsNullOrWhiteSpace(videoId))
+                {
+                    continue;
+                }
+
+                if (videoEntry is JsonObject videoObject)
+                {
+                    videoObject["__playlist_id"] = playlistId;
+                    videoObject["__playlist_title"] = seasonDefinition.Title;
+                    videoObject["__playlist_season_number"] = seasonDefinition.SeasonNumber;
+                    videoObject["__playlist_episode_number"] = index + 1;
+                    videoObject["__sync_id"] = playlistId + ":" + videoId;
+                }
+
+                expandedEntries.Add(videoEntry);
+            }
+        }
+
+        _logger.LogInformation(
+            "Expanded {PlaylistCount} discovered playlist(s) into {VideoCount} unique video entr{Suffix}.",
+            discoveredPlaylists,
+            expandedEntries.Count,
+            expandedEntries.Count == 1 ? "y" : "ies");
+
+        return expandedEntries;
+    }
+
+    private static IReadOnlyList<PlaylistSeasonDefinition> BuildPlaylistSeasonDefinitions(IReadOnlyList<JsonNode> playlistEntries)
+    {
+        var definitions = new List<PlaylistSeasonDefinition>(playlistEntries.Count);
+        var seenPlaylistIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var playlistEntry in playlistEntries)
+        {
+            var playlistId = GetChannelPlaylistId(playlistEntry);
+            if (string.IsNullOrWhiteSpace(playlistId) || !seenPlaylistIds.Add(playlistId))
+            {
+                continue;
+            }
+
+            var title = GetString(playlistEntry, "title");
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                title = playlistId;
+            }
+
+            definitions.Add(new PlaylistSeasonDefinition(playlistId, title, definitions.Count + 1));
+        }
+
+        return definitions;
+    }
+
+    private static string GetChannelPlaylistUrl(JsonNode entry)
+    {
+        var webpageUrl = GetString(entry, "webpage_url");
+        if (!string.IsNullOrWhiteSpace(webpageUrl) && webpageUrl.Contains("list=", StringComparison.OrdinalIgnoreCase))
+        {
+            return webpageUrl;
+        }
+
+        var url = GetString(entry, "url");
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                return url;
+            }
+
+            if (url.Contains("list=", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"https://www.youtube.com/{url.TrimStart('/')}";
+            }
+        }
+
+        var playlistId = GetString(entry, "id");
+        if (string.IsNullOrWhiteSpace(playlistId))
+        {
+            return string.Empty;
+        }
+
+        return $"https://www.youtube.com/playlist?list={playlistId}";
+    }
+
+    private static string GetChannelPlaylistId(JsonNode entry)
+    {
+        var playlistId = GetString(entry, "id");
+        if (!string.IsNullOrWhiteSpace(playlistId))
+        {
+            return playlistId;
+        }
+
+        var playlistUrl = GetChannelPlaylistUrl(entry);
+        if (string.IsNullOrWhiteSpace(playlistUrl))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var uri = new Uri(playlistUrl);
+            var query = uri.Query.TrimStart('?')
+                .Split('&', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            foreach (var pair in query)
+            {
+                var parts = pair.Split('=', 2);
+                if (parts.Length == 2 && parts[0].Equals("list", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Uri.UnescapeDataString(parts[1]);
+                }
+            }
+        }
+        catch (UriFormatException)
+        {
+        }
+
+        return string.Empty;
+    }
+
     private static void NormalizeVideoMetadata(VideoMetadata metadata, JsonNode entry, string videoId, string sourceName)
     {
+        if (string.IsNullOrWhiteSpace(metadata.SyncId))
+        {
+            metadata.SyncId = GetString(entry, "__sync_id");
+        }
+
+        if (string.IsNullOrWhiteSpace(metadata.SyncId))
+        {
+            metadata.SyncId = videoId;
+        }
+
         if (string.IsNullOrWhiteSpace(metadata.VideoId))
         {
             metadata.VideoId = videoId;
@@ -484,6 +691,26 @@ public class SyncService
             metadata.ChannelName = sourceName;
         }
 
+        if (string.IsNullOrWhiteSpace(metadata.PlaylistId))
+        {
+            metadata.PlaylistId = GetString(entry, "__playlist_id");
+        }
+
+        if (string.IsNullOrWhiteSpace(metadata.PlaylistTitle))
+        {
+            metadata.PlaylistTitle = GetString(entry, "__playlist_title");
+        }
+
+        if (metadata.PlaylistSeasonNumber is null)
+        {
+            metadata.PlaylistSeasonNumber = GetNullableInt(entry, "__playlist_season_number");
+        }
+
+        if (metadata.PlaylistEpisodeNumber is null)
+        {
+            metadata.PlaylistEpisodeNumber = GetNullableInt(entry, "__playlist_episode_number");
+        }
+
         if (metadata.PublishedUtc is null)
         {
             metadata.PublishedUtc = YtDlpService.ParsePublishedDate(entry);
@@ -492,27 +719,28 @@ public class SyncService
 
     private static Dictionary<int, Dictionary<string, int>> BuildSeasonEpisodeCounters(
         IReadOnlyList<VideoMetadata> videos,
-        SourceMode sourceMode)
+        SourceDefinition source)
     {
         var counters = new Dictionary<int, Dictionary<string, int>>();
-        if (sourceMode == SourceMode.Movies)
+        if (source.Mode == SourceMode.Movies)
         {
             return counters;
         }
 
         foreach (var seasonGroup in videos
-                     .GroupBy(video => GetSeasonNumber(video.PublishedUtc, sourceMode) ?? 0)
+                     .GroupBy(video => GetSeasonNumber(video, source) ?? 0)
                      .OrderBy(group => group.Key))
         {
             var seasonEpisodes = new Dictionary<string, int>(StringComparer.Ordinal);
             var ordered = seasonGroup
-                .OrderBy(video => video.PublishedUtc ?? DateTime.MinValue)
+                .OrderBy(video => video.PlaylistEpisodeNumber ?? int.MaxValue)
+                .ThenBy(video => video.PublishedUtc ?? DateTime.MinValue)
                 .ThenBy(video => video.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             for (var index = 0; index < ordered.Count; index++)
             {
-                seasonEpisodes[ordered[index].VideoId] = index + 1;
+                seasonEpisodes[ordered[index].SyncId] = index + 1;
             }
 
             counters[seasonGroup.Key] = seasonEpisodes;
@@ -524,38 +752,53 @@ public class SyncService
     private static int? GetEpisodeNumber(
         VideoMetadata video,
         IReadOnlyDictionary<int, Dictionary<string, int>> seasonEpisodeCounters,
-        SourceMode sourceMode)
+        SourceDefinition source)
     {
-        if (sourceMode == SourceMode.Movies)
+        if (source.Mode == SourceMode.Movies)
         {
             return null;
         }
 
-        var seasonNumber = GetSeasonNumber(video.PublishedUtc, sourceMode) ?? 0;
+        var seasonNumber = GetSeasonNumber(video, source) ?? 0;
         return seasonEpisodeCounters.TryGetValue(seasonNumber, out var seasonMap)
-            && seasonMap.TryGetValue(video.VideoId, out var episode)
+            && seasonMap.TryGetValue(video.SyncId, out var episode)
             ? episode
             : null;
     }
 
-    private static int? GetSeasonNumber(DateTime? publishedUtc, SourceMode sourceMode)
+    private static int? GetSeasonNumber(VideoMetadata video, SourceDefinition source)
     {
-        if (sourceMode == SourceMode.Movies)
+        if (source.Mode == SourceMode.Movies)
         {
             return null;
         }
 
-        return publishedUtc?.Year;
+        if (source.Type == SourceType.Channel && source.Feed == ChannelFeed.Playlists)
+        {
+            return video.PlaylistSeasonNumber;
+        }
+
+        return video.PublishedUtc?.Year;
     }
 
-    private static string GetSeasonFolderName(DateTime? publishedUtc, SourceMode sourceMode)
+    private static string GetSeasonFolderName(VideoMetadata video, SourceDefinition source)
     {
-        if (sourceMode == SourceMode.Movies)
+        if (source.Mode == SourceMode.Movies)
         {
             return string.Empty;
         }
 
-        return publishedUtc is DateTime date ? $"Season {date.Year}" : string.Empty;
+        if (source.Type == SourceType.Channel && source.Feed == ChannelFeed.Playlists)
+        {
+            if (video.PlaylistSeasonNumber is not int playlistSeasonNumber)
+            {
+                return string.Empty;
+            }
+
+            return $"Season {playlistSeasonNumber:00}";
+        }
+
+        return video.PublishedUtc is DateTime date ? $"Season {date.Year}" : string.Empty;
     }
 
     private static string BuildVideoFolderName(string title, string videoId)

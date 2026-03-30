@@ -20,6 +20,21 @@ public sealed class VideoMetadata
     /// <summary>Gets or sets the uploader or channel name.</summary>
     public string ChannelName { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets a sync-unique identifier used for local item identity.</summary>
+    public string SyncId { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the originating playlist identifier when the source syncs channel playlists.</summary>
+    public string PlaylistId { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the originating playlist title when the source syncs channel playlists.</summary>
+    public string PlaylistTitle { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the synthetic season number assigned to the playlist.</summary>
+    public int? PlaylistSeasonNumber { get; set; }
+
+    /// <summary>Gets or sets the position of the video inside its originating playlist.</summary>
+    public int? PlaylistEpisodeNumber { get; set; }
+
     /// <summary>Gets or sets the published date in UTC when available.</summary>
     public DateTime? PublishedUtc { get; set; }
 

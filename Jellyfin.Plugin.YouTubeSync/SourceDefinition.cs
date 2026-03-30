@@ -22,6 +22,22 @@ public enum SourceMode
     Movies
 }
 
+/// <summary>Determines which channel tab is synced for channel sources.</summary>
+public enum ChannelFeed
+{
+    /// <summary>Sync regular uploaded videos from the /videos tab.</summary>
+    Videos,
+
+    /// <summary>Sync channel-curated playlists from the /playlists tab.</summary>
+    Playlists,
+
+    /// <summary>Sync short-form uploads from the /shorts tab.</summary>
+    Shorts,
+
+    /// <summary>Sync live and stream archive content from the /streams tab.</summary>
+    Streams
+}
+
 /// <summary>Describes a single YouTube source (channel or playlist) to sync.</summary>
 public class SourceDefinition
 {
@@ -42,6 +58,9 @@ public class SourceDefinition
 
     /// <summary>Gets or sets the human-readable display name used as the folder name.</summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets which channel feed tab to sync when <see cref="Type"/> is <see cref="SourceType.Channel"/>.</summary>
+    public ChannelFeed Feed { get; set; } = ChannelFeed.Videos;
 
     /// <summary>Gets or sets an optional description written into the source .nfo file.</summary>
     public string Description { get; set; } = string.Empty;
@@ -66,7 +85,7 @@ public class SourceDefinition
             {
                 if (Type == SourceType.Channel)
                 {
-                    return EnsureChannelVideosTab(Id);
+                    return EnsureChannelFeedTab(Id, Feed);
                 }
 
                 return Id;
@@ -74,7 +93,7 @@ public class SourceDefinition
 
             // Legacy: bare ID → construct a standard URL.
             return Type == SourceType.Channel
-                ? $"https://www.youtube.com/channel/{Id}/videos"
+                ? $"https://www.youtube.com/channel/{Id}{GetChannelFeedSuffix(Feed)}"
                 : $"https://www.youtube.com/playlist?list={Id}";
         }
     }
@@ -86,10 +105,9 @@ public class SourceDefinition
         ["/videos", "/shorts", "/streams", "/featured", "/about", "/community", "/playlists", "/channels"];
 
     /// <summary>
-    /// Appends <c>/videos</c> to a channel URL if no tab sub-path is present.
-    /// This ensures yt-dlp returns only regular uploads and ignores Shorts / live streams.
+    /// Applies the selected channel tab by removing a known tab suffix and appending the selected feed suffix.
     /// </summary>
-    private static string EnsureChannelVideosTab(string channelUrl)
+    private static string EnsureChannelFeedTab(string channelUrl, ChannelFeed feed)
     {
         var url = channelUrl.TrimEnd('/');
 
@@ -97,10 +115,22 @@ public class SourceDefinition
         {
             if (url.EndsWith(tab, StringComparison.OrdinalIgnoreCase))
             {
-                return url;
+                url = url[..^tab.Length];
+                break;
             }
         }
 
-        return url + "/videos";
+        return url + GetChannelFeedSuffix(feed);
+    }
+
+    private static string GetChannelFeedSuffix(ChannelFeed feed)
+    {
+        return feed switch
+        {
+            ChannelFeed.Playlists => "/playlists",
+            ChannelFeed.Shorts => "/shorts",
+            ChannelFeed.Streams => "/streams",
+            _ => "/videos"
+        };
     }
 }
