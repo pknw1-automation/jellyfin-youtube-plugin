@@ -73,6 +73,11 @@ public class SyncService
         var retentionCutoffUtc = config.VideoRetentionDays > 0
             ? DateTime.UtcNow.AddDays(-config.VideoRetentionDays)
             : (DateTime?)null;
+        var isChannelPlaylistFeed = source.Type == SourceType.Channel && source.Feed == ChannelFeed.Playlists;
+        if (isChannelPlaylistFeed)
+        {
+            retentionCutoffUtc = null;
+        }
 
         var name = string.IsNullOrWhiteSpace(source.Name)
             ? sourceInfo?.Title ?? source.Id
@@ -90,7 +95,19 @@ public class SyncService
         _logger.LogInformation("Starting sync for source '{Name}'", name);
 
         var maxEntryScanCount = GetMaxEntryScanCount(config.VideoRetentionDays, config.MaxVideosPerSource);
-        if (maxEntryScanCount > 0)
+        var playlistDiscoveryLimit = GetPlaylistDiscoveryLimit(config.RecentPlaylistsToKeep);
+
+        if (isChannelPlaylistFeed)
+        {
+            if (playlistDiscoveryLimit > 0)
+            {
+                _logger.LogInformation(
+                    "Applying playlist discovery limit {PlaylistDiscoveryLimit} for source '{Name}'.",
+                    playlistDiscoveryLimit,
+                    name);
+            }
+        }
+        else if (maxEntryScanCount > 0)
         {
             _logger.LogInformation(
                 "Applying upfront entry scan limit {MaxEntryScanCount} for source '{Name}' with retention {RetentionDays} day(s).",
@@ -100,15 +117,19 @@ public class SyncService
         }
 
         var entries = await _ytDlpService
-            .GetPlaylistEntriesAsync(source.Url, config.VideoRetentionDays, maxEntryScanCount, cancellationToken)
+            .GetPlaylistEntriesAsync(
+                source.Url,
+                isChannelPlaylistFeed ? 0 : config.VideoRetentionDays,
+                isChannelPlaylistFeed ? playlistDiscoveryLimit : maxEntryScanCount,
+                cancellationToken)
             .ConfigureAwait(false);
 
         IReadOnlyList<PlaylistSeasonDefinition> playlistSeasonDefinitions = Array.Empty<PlaylistSeasonDefinition>();
 
-        if (source.Type == SourceType.Channel && source.Feed == ChannelFeed.Playlists)
+        if (isChannelPlaylistFeed)
         {
             playlistSeasonDefinitions = BuildPlaylistSeasonDefinitions(entries);
-            entries = await ExpandChannelPlaylistsAsync(entries, playlistSeasonDefinitions, config.VideoRetentionDays, maxEntryScanCount, cancellationToken)
+            entries = await ExpandChannelPlaylistsAsync(entries, playlistSeasonDefinitions, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -507,8 +528,6 @@ public class SyncService
     private async Task<IReadOnlyList<JsonNode>> ExpandChannelPlaylistsAsync(
         IReadOnlyList<JsonNode> playlistEntries,
         IReadOnlyList<PlaylistSeasonDefinition> playlistSeasonDefinitions,
-        int videoRetentionDays,
-        int maxEntryScanCount,
         CancellationToken cancellationToken)
     {
         var expandedEntries = new List<JsonNode>();
@@ -532,7 +551,7 @@ public class SyncService
 
             discoveredPlaylists++;
             var playlistVideos = await _ytDlpService
-                .GetPlaylistEntriesAsync(playlistUrl, videoRetentionDays, maxEntryScanCount, cancellationToken)
+                .GetPlaylistEntriesAsync(playlistUrl, 0, 0, cancellationToken)
                 .ConfigureAwait(false);
 
             for (var index = 0; index < playlistVideos.Count; index++)
@@ -1064,6 +1083,11 @@ public class SyncService
         }
 
         return retentionBasedLimit;
+    }
+
+    private static int GetPlaylistDiscoveryLimit(int recentPlaylistsToKeep)
+    {
+        return recentPlaylistsToKeep > 0 ? recentPlaylistsToKeep : 0;
     }
 
     private static string BuildDateTag(string tagName, DateTime? date)

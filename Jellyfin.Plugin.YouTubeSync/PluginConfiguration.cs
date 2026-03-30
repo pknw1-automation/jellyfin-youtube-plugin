@@ -77,6 +77,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public int VideoRetentionDays { get; set; } = 300;
 
     /// <summary>
+    /// Gets or sets how many of the most recent playlists are kept for channel sources using the playlist feed.
+    /// Set to 0 to keep all discovered playlists.
+    /// </summary>
+    public int RecentPlaylistsToKeep { get; set; } = 20;
+
+    /// <summary>
     /// Gets or sets the legacy maximum number of videos to sync per source.
     /// Retained for backward compatibility with existing saved plugin configuration.
     /// </summary>

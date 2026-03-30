@@ -110,6 +110,7 @@ export default function (view) {
             view.querySelector('#CacheMinutes').value = config.CacheMinutes != null ? config.CacheMinutes : 5;
             view.querySelector('#PlaybackTarget').value = config.PlaybackTarget || 'BroadCompatibility720p';
             view.querySelector('#VideoRetentionDays').value = config.VideoRetentionDays != null ? config.VideoRetentionDays : 300;
+            view.querySelector('#RecentPlaylistsToKeep').value = config.RecentPlaylistsToKeep != null ? config.RecentPlaylistsToKeep : 20;
             view.querySelector('#AllowManagedTranscoding').value = String(config.AllowManagedTranscoding === true);
             view.querySelector('#FfmpegPath').value = config.FfmpegPath || 'ffmpeg';
             view.querySelector('#ManagedTranscodeHardwareMode').value = config.ManagedTranscodeHardwareMode || 'None';
@@ -132,6 +133,7 @@ export default function (view) {
             CacheMinutes: parseInt(view.querySelector('#CacheMinutes').value, 10) || 5,
             PlaybackTarget: view.querySelector('#PlaybackTarget').value,
             VideoRetentionDays: parseInt(view.querySelector('#VideoRetentionDays').value, 10) || 0,
+            RecentPlaylistsToKeep: parseInt(view.querySelector('#RecentPlaylistsToKeep').value, 10) || 0,
             AllowManagedTranscoding: view.querySelector('#AllowManagedTranscoding').value === 'true',
             FfmpegPath: view.querySelector('#FfmpegPath').value.trim(),
             ManagedTranscodeHardwareMode: view.querySelector('#ManagedTranscodeHardwareMode').value,
