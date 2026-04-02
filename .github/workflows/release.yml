@@ -31,7 +31,7 @@ jobs:
         id: version
         run: |
           # tag = v1.2.3  →  VERSION = 1.2.3  →  ASSEMBLY_VERSION = 1.2.3.0
-          TAG="${GITHUB_REF#refs/tags/v}"
+          TAG="${{ inputs.version }}"
           echo "TAG_VERSION=${TAG}" >> "$GITHUB_OUTPUT"
           echo "ASSEMBLY_VERSION=${TAG}.0" >> "$GITHUB_OUTPUT"
           echo "ZIP_NAME=jellyfin-youtubesync_${TAG}.zip" >> "$GITHUB_OUTPUT"
