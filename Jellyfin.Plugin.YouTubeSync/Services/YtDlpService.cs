@@ -42,7 +42,7 @@ public class YtDlpService
         var playbackTarget = GetPlaybackTarget();
         var playbackSelector = GetPlaybackFormatSelector(playbackTarget);
         var result = await RunYtDlpTextAsync(
-            new[] { "-f", playbackSelector, "--get-url", "--no-playlist", url },
+            new[] { "-f", playbackSelector, "--get-url", "--no-playlist", "--config-locations", "/config/yt-dlp.conf", url },
             cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(result))
@@ -93,7 +93,7 @@ public class YtDlpService
     {
         var url = $"https://www.youtube.com/watch?v={videoId}";
         var result = await RunYtDlpTextAsync(
-            new[] { "-f", ManagedPlaybackInputSelector, "--get-url", "--no-playlist", url },
+            new[] { "-f", ManagedPlaybackInputSelector, "--get-url", "--no-playlist", "--config-locations", "/config/yt-dlp.conf",  url },
             cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(result))
@@ -152,7 +152,7 @@ public class YtDlpService
         int maxEntryScanCount,
         CancellationToken cancellationToken)
     {
-        var args = new List<string> { "--flat-playlist", "-J" };
+        var args = new List<string> { "--flat-playlist", "--config-locations", "/config/yt-dlp.conf", "-J" };
         if (maxEntryScanCount > 0)
         {
             args.Add("--playlist-end");
@@ -192,7 +192,7 @@ public class YtDlpService
     public async Task<VideoMetadata?> GetVideoMetadataAsync(string videoId, CancellationToken cancellationToken)
     {
         var url = $"https://www.youtube.com/watch?v={videoId}";
-        var result = await RunYtDlpJsonAsync(new[] { "-J", "--no-playlist", url }, cancellationToken).ConfigureAwait(false);
+        var result = await RunYtDlpJsonAsync(new[] { "-J", "--no-playlist", "--config-locations", "/config/yt-dlp.conf", url }, cancellationToken).ConfigureAwait(false);
         if (result is null)
         {
             return null;
@@ -233,7 +233,9 @@ public class YtDlpService
                 "--print", "%(release_date)s",
                 "--print", "%(timestamp)s",
                 "--print", "%(release_timestamp)s",
-                "--print", "%(release_year)s",
+                "--print", "%(release_year)s", 
+                "--config-locations", 
+                "/config/yt-dlp.conf",
                 url
             },
             cancellationToken).ConfigureAwait(false);
@@ -256,7 +258,7 @@ public class YtDlpService
     public async Task<SourceInfo?> GetSourceInfoAsync(string url, CancellationToken cancellationToken)
     {
         // --playlist-end 1 limits video retrieval but the container metadata is always present.
-        var args = new[] { "--flat-playlist", "-J", "--playlist-end", "1", url };
+        var args = new[] { "--flat-playlist", "-J", "--playlist-end", "--config-locations", "/config/yt-dlp.conf", "1", url };
         var result = await RunYtDlpJsonAsync(args, cancellationToken).ConfigureAwait(false);
         if (result is null)
         {
